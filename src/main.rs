@@ -1,9 +1,22 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io;
+use std::fs::File;
+use nfd::Response;
+use std::error::Error;
 use std::time::SystemTime;
 use chrono::{DateTime, Local};
+use fltk::{app::*, group::*};
+use fltk::{button::Button, frame::Frame,  window::*};
+use fltk::enums::FrameType;
+use fltk::prelude::*;
+use std::option::Option as StdOption; 
+use fltk::enums::Color;
+use fltk::input::Input;
+use std::io::Write;
+use fltk::enums::Event;
 
+use fltk::{prelude::*, *};
 #[derive(Debug)]
 struct Configurations {
     is_file: bool,
@@ -17,9 +30,9 @@ struct DiskItem {
     name: String,
     is_file: bool,
     size: u64,
-    last_accessed: Option<String>,
-    last_modified: Option<String>,
-    created: Option<String>,
+    last_accessed: StdOption<String>,
+    last_modified: StdOption<String>,
+    created: StdOption<String>,
     depth: usize,
     path: String,
     children: Vec<DiskItem>,
@@ -34,7 +47,7 @@ fn calculate_disk_usage(item: &DiskItem) -> u64 {
     }
 }
 
-fn format_system_time(st: Option<SystemTime>) -> Option<String> {
+fn format_system_time(st: StdOption<SystemTime>) -> StdOption<String> {
     st.map(|time| {
         let datetime: DateTime<Local> = time.into();
         datetime.format("%Y-%m-%d %H:%M").to_string()
@@ -128,6 +141,7 @@ fn filter_items(item: &DiskItem, configs: &Configurations) -> DiskItem {
 }
 
 fn main() {
+    /*
     let directory_path = Path::new("/home/youssif-abuzied/Desktop");
     let configs = Configurations {
         is_file: true, // Set to false to display only folders, true for both files and folders
@@ -141,6 +155,56 @@ fn main() {
             println!("{:#?}", filtered_result);
         }
         Err(e) => eprintln!("Error: {}", e),
-    }
+    }*/
+    let app = app::App::default().with_scheme(app::Scheme::Gtk);
+    let mut wind = window::Window::new(100, 100, 800, 600, "Welcome Screen");
+    wind.make_resizable(true);
+    wind.set_color(Color::Gray0); // Set the background color to Cyan
+    //let mut frame = Frame::default().with_size(200, 100).center_of(&wind);
+    let mut but = Button::new(360, 320, 65, 30, "Scan!");
+    let mut but1 = Button::new(560, 250, 65, 30, "Search!");
+    let mut input = Input::new(250, 250, 300, 30, ""); // Input field coordinates and size
+    let placeholder_text = "Enter the directory for scanning";
+    but.set_color(Color::Dark2);
+    input.set_text_size(10); // Set the text size within the input field
+
+    let mut path_to_scan= Default::default();
+    ;
+    input.set_value(placeholder_text); // Set the initial placeholder text
+    let mut input_clone = input.clone();
+
+    but1.set_callback(move |_| {
+        let file_path;
+        let result = nfd::open_pick_folder(None).unwrap_or(Response::Cancel);
+    
+        match result {
+            Response::Okay(f) => {file_path = f.clone();},
+            Response::Cancel => {file_path = String::from("No Folder is Selected");},
+            _ => { file_path =  String::from("Error Selecting a Folder"); },
+        }
+        input_clone.set_value(&file_path);
+        println!("{}", input_clone.value());
+
+        path_to_scan = file_path;
+        let mut file = match File::create("path.txt") {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("Error creating file: {}", e);
+                return;
+            }
+        };
+    
+        // Write the text to the file
+        match file.write_all(input_clone.value().as_bytes()) {
+            Ok(_) => println!("Text successfully written to file!"),
+            Err(e) => eprintln!("Error writing to file: {}", e),
+        }
+    
+    });
+    wind.end();
+    wind.show();
+    //but.set_callback(move |_| frame.set_label("Hello world"));
+
+    app.run().unwrap();
 }
 

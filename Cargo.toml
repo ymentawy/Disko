@@ -16,3 +16,5 @@ image = { version = "0.24", features = ["jpeg", "png"] }
 egui_glium = "0.14"
 egui_web = "0.14"
 chrono = "0.4"
+fltk = "1.4.17"
+nfd = "0.0.4"
