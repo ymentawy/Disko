@@ -1,1 +1,1 @@
-/home/youssif-abuzied/ana_disk/target
+Enter the directory for scanning

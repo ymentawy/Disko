@@ -9,13 +9,14 @@ use chrono::{DateTime, Local};
 use fltk::{app::*, group::*};
 use fltk::{button::Button, frame::Frame,  window::*};
 use fltk::enums::FrameType;
-use fltk::prelude::*;
+use fltk::{prelude::*, *};
 use std::option::Option as StdOption; 
 use fltk::enums::Color;
 use fltk::input::Input;
 use std::io::Write;
 use fltk::enums::Event;
-
+use fltk::misc::Chart;
+use std::collections::HashMap;
 use fltk::{prelude::*, *};
 #[derive(Debug)]
 struct Configurations {
@@ -139,6 +140,22 @@ fn filter_items(item: &DiskItem, configs: &Configurations) -> DiskItem {
 
     filtered_item
 }
+fn get_depth_one_items<'a>(filtered_result: &'a DiskItem) -> Vec<&'a DiskItem> {
+    let mut depth_one_items = Vec::new();
+
+    fn traverse_depth_one<'b>(item: &'b DiskItem, depth_one_items: &mut Vec<&'b DiskItem>) {
+        if item.depth == 1 {
+            depth_one_items.push(item);
+        } else {
+            for child in &item.children {
+                traverse_depth_one(child, depth_one_items);
+            }
+        }
+    }
+
+    traverse_depth_one(filtered_result, &mut depth_one_items);
+    depth_one_items
+}
 
 fn main() {
     /*
@@ -168,8 +185,8 @@ fn main() {
     but.set_color(Color::Dark2);
     input.set_text_size(10); // Set the text size within the input field
 
-    let mut path_to_scan= Default::default();
-    ;
+    //let mut path_to_scan= Default::default();
+    
     input.set_value(placeholder_text); // Set the initial placeholder text
     let mut input_clone = input.clone();
 
@@ -185,7 +202,14 @@ fn main() {
         input_clone.set_value(&file_path);
         println!("{}", input_clone.value());
 
-        path_to_scan = file_path;
+        
+    
+    });
+    let mut input_clone2 = input.clone();
+    let mut wind_clone = wind.clone();
+    but.set_callback(move |_| {
+
+        //path_to_scan = file_path;
         let mut file = match File::create("path.txt") {
             Ok(file) => file,
             Err(e) => {
@@ -195,11 +219,62 @@ fn main() {
         };
     
         // Write the text to the file
-        match file.write_all(input_clone.value().as_bytes()) {
+        match file.write_all(input_clone2.value().as_bytes()) {
             Ok(_) => println!("Text successfully written to file!"),
             Err(e) => eprintln!("Error writing to file: {}", e),
         }
-    
+        let mut new_wind = Window::new(200, 200, 800, 600, "New Window");
+     
+        wind_clone.hide();
+        new_wind.make_resizable(true);
+
+        let mut chart = Chart::new(400, 300, 200, 200, "");        chart.set_type(misc::ChartType::Pie);
+        chart.set_bounds(10.0, 50.0);
+        chart.set_text_size(18);
+        let mut chart_colne = chart.clone();
+        let directory_path = Path::new("/home/youssif-abuzied/Desktop");
+            let configs = Configurations {
+                is_file: true, // Set to false to display only folders, true for both files and folders
+                max_depth: 1,
+                include_hidden_files : true,   // Adjust depth as needed
+            };
+
+            match scan_directory(&directory_path, 0) {
+                Ok(scanned_result) => {
+                    let filtered_result = filter_items(&scanned_result, &configs);
+                    let depth_one_items = get_depth_one_items(&filtered_result);
+                
+                    // Display or work with the items at depth 1
+                    for item in depth_one_items {
+                        println!("{:#?}", item);
+                        
+                        chart.add(item.size as f64, &item.name,enums::Color::from_u32(0xcc9c59) )
+                    }
+                    // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
+                    // chart.add(8.4, "C++", enums::Color::Red);
+                    // chart.add(3.2, "C", enums::Color::Black);
+                    // chart.set_color(enums::Color::White);
+                   // println!("{:#?}", filtered_result);
+                 
+                }
+                Err(e) => eprintln!("Error: {}", e),
+        }
+        // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
+        // chart.add(8.4, "C++", enums::Color::Red);
+        // chart.add(3.2, "C", enums::Color::Black);
+        // chart.set_color(enums::Color::White);
+        let mut choice = menu::Choice::new(300, 5, 200, 40, "Chart type");
+        choice.add_choice("Bar | HorzBar | Line | Fill | Spike | Pie | SpecialPie");
+        choice.set_value(5);
+        choice.set_color(enums::Color::White);
+        
+        new_wind.show();
+        new_wind.end();
+        choice.set_callback(move |c| {
+            chart.set_type(misc::ChartType::from_i32(c.value()));
+            chart.redraw();
+        });
+       
     });
     wind.end();
     wind.show();
