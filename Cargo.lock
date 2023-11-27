@@ -168,6 +168,7 @@ dependencies = [
  "egui_glium",
  "egui_web",
  "fltk",
+ "fltk-theme",
  "image 0.24.7",
  "nfd",
  "plotters",
@@ -1287,6 +1288,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19a692af744b3c7d39c670c427786be2288467925b1b6c1d8fb7f3d3ce779b2a"
 dependencies = [
  "cmake",
+]
+
+[[package]]
+name = "fltk-theme"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3539d27a815514b56af2afa6b8e7c6d6b9274a103239487d5a60daa6340a4868"
+dependencies = [
+ "fltk",
 ]
 
 [[package]]

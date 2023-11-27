@@ -19,8 +19,40 @@ use fltk::misc::Chart;
 use std::collections::HashMap;
 use std::io::Read;
 use fltk::enums::Shortcut;
+use fltk_theme::{widget_themes, WidgetTheme, ThemeType};use fltk::{prelude::*, *};
+use fltk_theme::color_themes;
+use fltk_theme::ColorTheme;
 
-use fltk::{prelude::*, *};
+use fltk::{
+    app, dialog,
+    enums::{CallbackTrigger,  Font},
+    menu,
+    prelude::*,
+    printer, text, window,
+};
+use std::{
+    error,
+    ops::{Deref, DerefMut},
+    path,
+};
+
+#[derive(Copy, Clone)]
+#[derive(PartialEq)]
+
+pub enum Message {
+   // Changed,
+    New,
+    Open,
+    Save,
+    //SaveAs,
+    //Print,
+    //Quit,
+    //Cut,
+    //Copy,
+    //Paste,
+    //About,
+}
+
 #[derive(Debug)]
 struct Configurations {
     is_file: bool,
@@ -177,15 +209,17 @@ fn main() {
         Err(e) => eprintln!("Error: {}", e),
     }*/
     let app = app::App::default().with_scheme(app::Scheme::Gtk);
+    let (s, r) = app::channel::<Message>();
+
+    let theme = ColorTheme::new(color_themes::TAN_THEME);
+    theme.apply();
     let mut wind = window::Window::new(100, 100, 800, 600, "Welcome Screen");
     wind.make_resizable(true);
-    wind.set_color(Color::Gray0); // Set the background color to Cyan
     //let mut frame = Frame::default().with_size(200, 100).center_of(&wind);
     let mut but = Button::new(360, 320, 65, 30, "Scan!");
     let mut but1 = Button::new(560, 250, 65, 30, "Search!");
     let mut input = Input::new(250, 250, 300, 30, ""); // Input field coordinates and size
     let placeholder_text = "Enter the directory for scanning";
-    but.set_color(Color::Dark2);
     input.set_text_size(10); // Set the text size within the input field
 
     //let mut path_to_scan= Default::default();
@@ -231,11 +265,37 @@ fn main() {
         wind_clone.hide();
         new_wind.make_resizable(true);
         let mut menu_bar = MenuBar::new(0, 0, 4000, 100, "");
-
-        // Add a menu to the menu bar
-        let mut file_menu = MenuButton::new(0, 0, 150, 100, "&File");
-       
-
+        menu_bar.add(
+            "&File/New...\t",
+            Shortcut::Ctrl | 'n',
+            menu::MenuFlag::Normal,
+                |_| println!("Opened file!"),
+        );
+        if let Some(mut item) = menu_bar.find_item("&File/New...\t") {
+            item.set_callback(move |_|{
+                println!("Hello World");
+            });
+        }
+        // menu_bar.add_emit(
+        //     "&File/Open...\t",
+        //     Shortcut::Ctrl | 'o',
+        //     menu::MenuFlag::Normal,
+        //     s,
+        //     Message::Open,
+        // );
+        
+        // let r_clone = r.clone(); // Clone the receiver for the callback
+        // menu_bar.set_callback(move |item| {
+        //     match item.label() {
+        //         (&"New") => println!("New item clicked!"),
+        //         (&"Open") => println!("Open item clicked!"),
+        //         (&"Save") => println!("Save item clicked!"),
+        //         (&"Quit") => println!("Quit item clicked!"),
+        //         _ => {}
+        //     }
+        // });
+     
+       // let menu = menu::MenuItem::new(&["1st menu item\t", "2nd menu item\t", "3rd menu item\t"]);
     // Add the file_menu to the menu bar
 
         let mut chart = Chart::new(2000, 400, 2000, 2000, "");        chart.set_type(misc::ChartType::Pie);
