@@ -7,7 +7,7 @@ use std::error::Error;
 use std::time::SystemTime;
 use chrono::{DateTime, Local};
 use fltk::{app::*, group::*};
-use fltk::{button::Button, frame::Frame,  window::*};
+use fltk::{button::Button, frame::Frame,  window::*, menu::*};
 use fltk::enums::FrameType;
 use fltk::{prelude::*, *};
 use std::option::Option as StdOption; 
@@ -17,6 +17,9 @@ use std::io::Write;
 use fltk::enums::Event;
 use fltk::misc::Chart;
 use std::collections::HashMap;
+use std::io::Read;
+use fltk::enums::Shortcut;
+
 use fltk::{prelude::*, *};
 #[derive(Debug)]
 struct Configurations {
@@ -223,16 +226,25 @@ fn main() {
             Ok(_) => println!("Text successfully written to file!"),
             Err(e) => eprintln!("Error writing to file: {}", e),
         }
-        let mut new_wind = Window::new(200, 200, 800, 600, "New Window");
+        let mut new_wind = Window::new(0, 0, 4000, 3000, "New Window");
      
         wind_clone.hide();
         new_wind.make_resizable(true);
+        let mut menu_bar = MenuBar::new(0, 0, 4000, 100, "");
 
-        let mut chart = Chart::new(400, 300, 200, 200, "");        chart.set_type(misc::ChartType::Pie);
-        chart.set_bounds(10.0, 50.0);
+        // Add a menu to the menu bar
+        let mut file_menu = MenuButton::new(0, 0, 150, 100, "&File");
+       
+
+    // Add the file_menu to the menu bar
+
+        let mut chart = Chart::new(2000, 400, 2000, 2000, "");        chart.set_type(misc::ChartType::Pie);
+        chart.set_bounds(0.0, 100.0);
         chart.set_text_size(18);
         let mut chart_colne = chart.clone();
-        let directory_path = Path::new("/home/youssif-abuzied/Desktop");
+        let contents = fs::read_to_string("path.txt")
+        .expect("Should have been able to read the file");
+        let directory_path = Path::new(&contents);
             let configs = Configurations {
                 is_file: true, // Set to false to display only folders, true for both files and folders
                 max_depth: 1,
@@ -245,10 +257,21 @@ fn main() {
                     let depth_one_items = get_depth_one_items(&filtered_result);
                 
                     // Display or work with the items at depth 1
+                    let colors = [
+                        enums::Color::Red,
+                        enums::Color::Blue,
+                        enums::Color::Green,
+                        enums::Color::Magenta,
+                        enums::Color::Cyan,
+                        enums::Color::Yellow,
+                        enums::Color::DarkRed,
+                        // Add more colors as needed
+                    ];
+                    let mut color_cycle = colors.iter().cycle();
                     for item in depth_one_items {
                         println!("{:#?}", item);
-                        
-                        chart.add(item.size as f64, &item.name,enums::Color::from_u32(0xcc9c59) )
+                        let color = color_cycle.next().unwrap_or(&enums::Color::Black);
+                        chart.add(item.size as f64, &item.name,*color)
                     }
                     // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
                     // chart.add(8.4, "C++", enums::Color::Red);
@@ -263,7 +286,7 @@ fn main() {
         // chart.add(8.4, "C++", enums::Color::Red);
         // chart.add(3.2, "C", enums::Color::Black);
         // chart.set_color(enums::Color::White);
-        let mut choice = menu::Choice::new(300, 5, 200, 40, "Chart type");
+        let mut choice = menu::Choice::new(2800, 200, 400, 150, "Chart type");
         choice.add_choice("Bar | HorzBar | Line | Fill | Spike | Pie | SpecialPie");
         choice.set_value(5);
         choice.set_color(enums::Color::White);
