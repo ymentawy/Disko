@@ -22,6 +22,9 @@ use fltk::enums::Shortcut;
 use fltk_theme::{widget_themes, WidgetTheme, ThemeType};use fltk::{prelude::*, *};
 use fltk_theme::color_themes;
 use fltk_theme::ColorTheme;
+use serde::Serialize;
+use serde::Deserialize;
+use regex::Regex;
 
 use fltk::{
     app, dialog,
@@ -53,13 +56,15 @@ pub enum Message {
     //About,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Configurations {
     is_file: bool,
     max_depth: usize,
     include_hidden_files: bool,
     min_size: u64, // Minimum size in bytes
     max_size: u64, // Maximum size in bytes
+    use_regex: bool, // Indicates whether to use regex
+    regex_pattern: StdOption<String>, // Holds the regex pattern if use_regex is true
 }
 
 #[derive(Debug)]
@@ -139,7 +144,26 @@ fn check_file(item: &DiskItem, configs: &Configurations) -> bool {
     if(configs.min_size > item.size || configs.max_size < item.size){
         res = true;
     }
+    if(configs.use_regex){
+        let Some(ref pattern) = configs.regex_pattern else { todo!() };
+       // println!("{}", pattern);
+        let re = Regex::new(&pattern).unwrap();
+        let m = re.is_match(&item.name);
+        if(m){
+            res = true;
+        }
+    }
+
     return !res;
+}
+fn read_configurations_from_json(file_path: &str) -> Result<Configurations, Box<dyn std::error::Error>> {
+    let mut file = File::open(file_path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    let configurations: Configurations = serde_json::from_str(&contents)?;
+
+    Ok(configurations)
 }
 
 fn filter_items(item: &DiskItem, configs: &Configurations) -> DiskItem {
@@ -268,14 +292,10 @@ fn main() {
         let contents = fs::read_to_string("path.txt")
         .expect("Should have been able to read the file");
         let directory_path = Path::new(&contents);
-        let configs = Configurations {
-            is_file: true, // Set to false to display only folders, true for both files and folders
-            max_depth: 1,
-            include_hidden_files : true, 
-            min_size : 0,
-            max_size: 1024*1024,  // Adjust depth as needed
-        };
-      
+        
+    
+        let Ok(configs) = read_configurations_from_json("configs.json") else { todo!() };   
+   
         match scan_directory(&directory_path, 0) {
             
                 Ok(scanned_result) => {
@@ -294,9 +314,11 @@ fn main() {
                
                 if let Some(mut item) = menu_bar.find_item("&Configurations/View\t") {
                     item.set_callback(move |_|{
-                        let mut popup = Window::new(600, 600, 700, 700, "View Configurations");
-                        let mut filesOnly = Frame::new(100, 50, 500, 100, "Include Files: ");
-
+                        let mut popup = Window::new(600, 600, 400, 400, "View Configurations");
+                        let label = format!("Include Files:   {}", configs.is_file);
+                        let mut filesOnly = Frame::new(70, 20, 70, 50, "");
+                        filesOnly.set_label(&label);
+                        filesOnly.set_label_size(18); 
                         popup.show();
                         popup.end();
                     });
@@ -305,18 +327,14 @@ fn main() {
                 chart.set_bounds(0.0, 100.0);
                 chart.set_text_size(18);
                 let mut chart_colne = chart.clone();
-                // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
-                // chart.add(8.4, "C++", enums::Color::Red);
-                // chart.add(3.2, "C", enums::Color::Black);
-                // chart.set_color(enums::Color::White);
                 let mut choice = menu::Choice::new(2800, 200, 400, 150, "Chart type");
-                choice.add_choice("Bar | HorzBar | Line | Fill | Spike | Pie | SpecialPie");
-                choice.set_value(5);
+                choice.add_choice(" Pie | SpecialPie");
+                choice.set_value(0);
                 choice.set_color(enums::Color::White);
                 
             
                 choice.set_callback(move |c| {
-                    chart_colne.set_type(misc::ChartType::from_i32(c.value()));
+                    chart_colne.set_type(misc::ChartType::from_i32(c.value()+5));
                     chart_colne.redraw();
                 });
                 let filtered_result = filter_items(&scanned_result, &configs);
@@ -339,11 +357,7 @@ fn main() {
                     let color = color_cycle.next().unwrap_or(&enums::Color::Black);
                     chart.add(item.size as f64, &item.name,*color)
                 }
-                // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
-                // chart.add(8.4, "C++", enums::Color::Red);
-                // chart.add(3.2, "C", enums::Color::Black);
-                // chart.set_color(enums::Color::White);
-                // println!("{:#?}", filtered_result);
+              
                 new_wind.show();
                 new_wind.end();
              

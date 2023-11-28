@@ -1,0 +1,10 @@
+{
+    "is_file": true,
+    "include_hidden_files" : true,
+    "max_depth": 3,
+    "min_size": 100,
+    "max_size": 500000,
+    "use_regex": false,
+    "regex_pattern": ".rs$" 
+  }
+  
