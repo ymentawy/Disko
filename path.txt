@@ -1,1 +1,1 @@
-Enter the directory for scanning
+/home/youssif-abuzied/ana_disk/src

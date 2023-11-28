@@ -58,6 +58,8 @@ struct Configurations {
     is_file: bool,
     max_depth: usize,
     include_hidden_files: bool,
+    min_size: u64, // Minimum size in bytes
+    max_size: u64, // Maximum size in bytes
 }
 
 #[derive(Debug)]
@@ -133,6 +135,9 @@ fn check_file(item: &DiskItem, configs: &Configurations) -> bool {
                 count = count +1;
             }
         }
+    }
+    if(configs.min_size > item.size || configs.max_size < item.size){
+        res = true;
     }
     return !res;
 }
@@ -214,7 +219,6 @@ fn main() {
     let theme = ColorTheme::new(color_themes::TAN_THEME);
     theme.apply();
     let mut wind = window::Window::new(100, 100, 800, 600, "Welcome Screen");
-    wind.make_resizable(true);
     //let mut frame = Frame::default().with_size(200, 100).center_of(&wind);
     let mut but = Button::new(360, 320, 65, 30, "Scan!");
     let mut but1 = Button::new(560, 250, 65, 30, "Search!");
@@ -244,6 +248,7 @@ fn main() {
     });
     let mut input_clone2 = input.clone();
     let mut wind_clone = wind.clone();
+    let mut frame = Frame::new(287, 350, 200, 50, "");
     but.set_callback(move |_| {
 
         //path_to_scan = file_path;
@@ -260,103 +265,93 @@ fn main() {
             Ok(_) => println!("Text successfully written to file!"),
             Err(e) => eprintln!("Error writing to file: {}", e),
         }
-        let mut new_wind = Window::new(0, 0, 4000, 3000, "New Window");
-     
-        wind_clone.hide();
-        new_wind.make_resizable(true);
-        let mut menu_bar = MenuBar::new(0, 0, 4000, 100, "");
-        menu_bar.add(
-            "&File/New...\t",
-            Shortcut::Ctrl | 'n',
-            menu::MenuFlag::Normal,
-                |_| println!("Opened file!"),
-        );
-        if let Some(mut item) = menu_bar.find_item("&File/New...\t") {
-            item.set_callback(move |_|{
-                println!("Hello World");
-            });
-        }
-        // menu_bar.add_emit(
-        //     "&File/Open...\t",
-        //     Shortcut::Ctrl | 'o',
-        //     menu::MenuFlag::Normal,
-        //     s,
-        //     Message::Open,
-        // );
-        
-        // let r_clone = r.clone(); // Clone the receiver for the callback
-        // menu_bar.set_callback(move |item| {
-        //     match item.label() {
-        //         (&"New") => println!("New item clicked!"),
-        //         (&"Open") => println!("Open item clicked!"),
-        //         (&"Save") => println!("Save item clicked!"),
-        //         (&"Quit") => println!("Quit item clicked!"),
-        //         _ => {}
-        //     }
-        // });
-     
-       // let menu = menu::MenuItem::new(&["1st menu item\t", "2nd menu item\t", "3rd menu item\t"]);
-    // Add the file_menu to the menu bar
-
-        let mut chart = Chart::new(2000, 400, 2000, 2000, "");        chart.set_type(misc::ChartType::Pie);
-        chart.set_bounds(0.0, 100.0);
-        chart.set_text_size(18);
-        let mut chart_colne = chart.clone();
         let contents = fs::read_to_string("path.txt")
         .expect("Should have been able to read the file");
         let directory_path = Path::new(&contents);
-            let configs = Configurations {
-                is_file: true, // Set to false to display only folders, true for both files and folders
-                max_depth: 1,
-                include_hidden_files : true,   // Adjust depth as needed
-            };
-
-            match scan_directory(&directory_path, 0) {
+        let configs = Configurations {
+            is_file: true, // Set to false to display only folders, true for both files and folders
+            max_depth: 1,
+            include_hidden_files : true, 
+            min_size : 0,
+            max_size: 1024*1024,  // Adjust depth as needed
+        };
+      
+        match scan_directory(&directory_path, 0) {
+            
                 Ok(scanned_result) => {
-                    let filtered_result = filter_items(&scanned_result, &configs);
-                    let depth_one_items = get_depth_one_items(&filtered_result);
-                
-                    // Display or work with the items at depth 1
-                    let colors = [
-                        enums::Color::Red,
-                        enums::Color::Blue,
-                        enums::Color::Green,
-                        enums::Color::Magenta,
-                        enums::Color::Cyan,
-                        enums::Color::Yellow,
-                        enums::Color::DarkRed,
-                        // Add more colors as needed
-                    ];
-                    let mut color_cycle = colors.iter().cycle();
-                    for item in depth_one_items {
-                        println!("{:#?}", item);
-                        let color = color_cycle.next().unwrap_or(&enums::Color::Black);
-                        chart.add(item.size as f64, &item.name,*color)
-                    }
-                    // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
-                    // chart.add(8.4, "C++", enums::Color::Red);
-                    // chart.add(3.2, "C", enums::Color::Black);
-                    // chart.set_color(enums::Color::White);
-                   // println!("{:#?}", filtered_result);
-                 
-                }
-                Err(e) => eprintln!("Error: {}", e),
-        }
-        // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
-        // chart.add(8.4, "C++", enums::Color::Red);
-        // chart.add(3.2, "C", enums::Color::Black);
-        // chart.set_color(enums::Color::White);
-        let mut choice = menu::Choice::new(2800, 200, 400, 150, "Chart type");
-        choice.add_choice("Bar | HorzBar | Line | Fill | Spike | Pie | SpecialPie");
-        choice.set_value(5);
-        choice.set_color(enums::Color::White);
+                let mut new_wind = Window::new(0, 0, 4000, 3000, "New Window");
         
-        new_wind.show();
-        new_wind.end();
-        choice.set_callback(move |c| {
-            chart.set_type(misc::ChartType::from_i32(c.value()));
-            chart.redraw();
-        });
+                wind_clone.hide();
+                new_wind.make_resizable(true);
+                let mut menu_bar = MenuBar::new(0, 0, 4000, 100, "");
+                menu_bar.add(
+                    "&Configurations/View\t",
+                    Shortcut::Ctrl | 'v',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Opened file!"),
+                );
+                
+               
+                if let Some(mut item) = menu_bar.find_item("&Configurations/View\t") {
+                    item.set_callback(move |_|{
+                        let mut popup = Window::new(600, 600, 700, 700, "View Configurations");
+                        let mut filesOnly = Frame::new(100, 50, 500, 100, "Include Files: ");
+
+                        popup.show();
+                        popup.end();
+                    });
+                }
+                let mut chart = Chart::new(2000, 400, 2000, 2000, "");        chart.set_type(misc::ChartType::Pie);
+                chart.set_bounds(0.0, 100.0);
+                chart.set_text_size(18);
+                let mut chart_colne = chart.clone();
+                // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
+                // chart.add(8.4, "C++", enums::Color::Red);
+                // chart.add(3.2, "C", enums::Color::Black);
+                // chart.set_color(enums::Color::White);
+                let mut choice = menu::Choice::new(2800, 200, 400, 150, "Chart type");
+                choice.add_choice("Bar | HorzBar | Line | Fill | Spike | Pie | SpecialPie");
+                choice.set_value(5);
+                choice.set_color(enums::Color::White);
+                
+            
+                choice.set_callback(move |c| {
+                    chart_colne.set_type(misc::ChartType::from_i32(c.value()));
+                    chart_colne.redraw();
+                });
+                let filtered_result = filter_items(&scanned_result, &configs);
+                let depth_one_items = get_depth_one_items(&filtered_result);
+            
+                // Display or work with the items at depth 1
+                let colors = [
+                    enums::Color::Red,
+                    enums::Color::Blue,
+                    enums::Color::Green,
+                    enums::Color::Magenta,
+                    enums::Color::Cyan,
+                    enums::Color::Yellow,
+                    enums::Color::DarkRed,
+                    // Add more colors as needed
+                ];
+                let mut color_cycle = colors.iter().cycle();
+                for item in depth_one_items {
+                    println!("{:#?}", item);
+                    let color = color_cycle.next().unwrap_or(&enums::Color::Black);
+                    chart.add(item.size as f64, &item.name,*color)
+                }
+                // chart.add(88.4, "Rust", enums::Color::from_u32(0xcc9c59));
+                // chart.add(8.4, "C++", enums::Color::Red);
+                // chart.add(3.2, "C", enums::Color::Black);
+                // chart.set_color(enums::Color::White);
+                // println!("{:#?}", filtered_result);
+                new_wind.show();
+                new_wind.end();
+             
+            }
+            Err(e) => {eprintln!("Error: {}", e);
+            frame.set_label("Directory Not found");},
+    }
+      
        
     });
     wind.end();
