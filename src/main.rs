@@ -57,6 +57,7 @@ pub enum Message {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone)]
 struct Configurations {
     is_file: bool,
     max_depth: usize,
@@ -295,7 +296,7 @@ fn main() {
         
     
         let Ok(configs) = read_configurations_from_json("configs.json") else { todo!() };   
-   
+        let mut clone_configgs = configs.clone();
         match scan_directory(&directory_path, 0) {
             
                 Ok(scanned_result) => {
@@ -310,15 +311,47 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Opened file!"),
                 );
-                
-               
+                let mut configs = configs.clone(); // Cloning the data
                 if let Some(mut item) = menu_bar.find_item("&Configurations/View\t") {
                     item.set_callback(move |_|{
                         let mut popup = Window::new(600, 600, 400, 400, "View Configurations");
-                        let label = format!("Include Files:   {}", configs.is_file);
-                        let mut filesOnly = Frame::new(70, 20, 70, 50, "");
-                        filesOnly.set_label(&label);
-                        filesOnly.set_label_size(18); 
+                        let filesOnlylabel = format!("Include Files:   {}", configs.is_file);
+                        let mut filesOnly = Frame::new(70, 10, 70, 30, "");
+                        filesOnly.set_label(&filesOnlylabel);
+                        filesOnly.set_label_size(18);
+
+                        let includeHiddenlabel = format!("Include Hidden Files:   {}", configs.include_hidden_files);
+                        let mut includeHidden = Frame::new(70, 50, 140, 30, "");
+                        includeHidden.set_label(&includeHiddenlabel);
+                        includeHidden.set_label_size(18);
+
+                        let maxDepthLabel = format!("Max File/Folder Depth:   {}", configs.max_depth);
+                        let mut maxDepth = Frame::new(70, 90, 135, 30, "");
+                        maxDepth.set_label(&maxDepthLabel);
+                        maxDepth.set_label_size(18);
+
+                        let minSizelabel = format!("Minimum Size:   {} Bytes", configs.min_size);
+                        let mut minSize = Frame::new(70, 130, 140, 30, "");
+                        minSize.set_label(&minSizelabel);
+                        minSize.set_label_size(18);
+                        
+                        let maxSizelabel = format!("Maximum Size:   {} Bytes", configs.max_size);
+                        let mut maxSize = Frame::new(70, 170, 170, 30, "");
+                        maxSize.set_label(&maxSizelabel);
+                        maxSize.set_label_size(18);
+
+                        let useRegexabel = format!("Use Regex:   {}", configs.use_regex);
+                        let mut useregex = Frame::new(70, 210, 70, 30, "");
+                        useregex.set_label(&useRegexabel);
+                        useregex.set_label_size(18);
+                        
+                        let Some(ref rpatter) = clone_configgs.regex_pattern else { todo!() };
+
+                        let regexlabel = format!("Regex Pattern:   {}", rpatter);
+                        let mut regexf = Frame::new(70, 250, 90, 30, "");
+                        regexf.set_label(&regexlabel);
+                        regexf.set_label_size(18);
+
                         popup.show();
                         popup.end();
                     });
