@@ -221,6 +221,44 @@ fn get_depth_one_items<'a>(filtered_result: &'a DiskItem) -> Vec<&'a DiskItem> {
     traverse_depth_one(filtered_result, &mut depth_one_items);
     depth_one_items
 }
+fn group_and_calculate_size(filtered_result: &DiskItem) -> HashMap<String, (u64, usize)> {
+    let mut file_groups: HashMap<String, (u64, usize)> = HashMap::new();
+
+    // Group items by file type or extension, calculate total size, and count number of files in each group
+    fn group_items(item: &DiskItem, file_groups: &mut HashMap<String, (u64, usize)>) {
+        if item.is_file {
+            let file_extension = match item.name.rfind('.') {
+                Some(index) => item.name[index + 1..].to_lowercase(),
+                None => "no_extension".to_string(), // Files without extensions
+            };
+
+            let entry = file_groups.entry(file_extension).or_insert((0, 0));
+            entry.0 += item.size;
+            entry.1 += 1;
+        }
+
+        for child in &item.children {
+            group_items(child, file_groups);
+        }
+    }
+
+    group_items(filtered_result, &mut file_groups);
+    file_groups
+}
+
+fn format_grouped_data(file_groups: &HashMap<String, (u64, usize)>) -> String {
+    let mut result = String::new();
+
+    for (file_type, (total_size, file_count)) in file_groups {
+        result.push_str(&format!(
+            "File type: {} - Total size: {} bytes - Number of files: {}\n",
+            file_type, total_size, file_count
+        ));
+        result.push('\n');
+    }
+
+    result
+}
 
 fn main() {
     /*
@@ -301,7 +339,9 @@ fn main() {
             
                 Ok(scanned_result) => {
                 let mut new_wind = Window::new(0, 0, 4000, 3000, "New Window");
-        
+                let filtered_result = filter_items(&scanned_result, &configs);
+                let mut filtered_result2 = filtered_result.clone();
+                
                 wind_clone.hide();
                 new_wind.make_resizable(true);
                 let mut menu_bar = MenuBar::new(0, 0, 4000, 100, "");
@@ -311,10 +351,131 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Opened file!"),
                 );
-            
-                let mut configs = configs.clone(); // Cloning the data
+                menu_bar.add(
+                    "&Configurations/Edit\t",
+                    Shortcut::Ctrl | 'e',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Edited Configurations!"),
+                );
+                menu_bar.add(
+                    "&Group/By Extension\t",
+                    Shortcut::Ctrl | 't',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Grouped By extension!"),
+                );
+                if let Some(mut item) = menu_bar.find_item("&Group/By Extension\t"){
+                    item.set_callback(move |_| {
+                        let mut popup = Window::new(600, 600, 1400, 1300, "Group files by extension");
+
+                        let extension_groups = group_and_calculate_size(&filtered_result2);
+                        let formatted_data = format_grouped_data(&extension_groups);  
+                        let mut groups_frame = Frame::new(70, 20, 300, 200, "");
+                        groups_frame.set_label(&formatted_data);
+                        groups_frame.set_label_size(14);
+
+                        let mut size_chart = Chart::new(20, 300, 600, 500, "");    
+                        size_chart.set_type(misc::ChartType::Pie);
+                        size_chart.set_bounds(0.0, 100.0);
+                        size_chart.set_text_size(14);
+
+                        let mut count_chart = Chart::new(700, 300, 600, 500, "");    
+                        count_chart.set_type(misc::ChartType::Pie);
+                        count_chart.set_bounds(0.0, 100.0);
+                        count_chart.set_text_size(14);
+
+                        let colors = [
+                            enums::Color::Red,
+                            enums::Color::Blue,
+                            enums::Color::Green,
+                            enums::Color::Magenta,
+                            enums::Color::Cyan,
+                            enums::Color::Yellow,
+                            enums::Color::DarkRed,
+                            // Add more colors as needed
+                        ];
+                        let mut color_cycle1 = colors.iter().cycle();
+                        let mut color_cycle2 = colors.iter().cycle();
+
+                        for  (file_type, (total_size, file_count))in extension_groups{
+                            let color = color_cycle1.next().unwrap_or(&enums::Color::Black);
+                            size_chart.add(total_size as f64, &file_type,*color);
+                            let color = color_cycle2.next().unwrap_or(&enums::Color::Black);
+                            count_chart.add(file_count as f64, &file_type,*color);
+                        }
+
+                        let mut size_frame = Frame::new(300, 850, 40, 30, "Size Pie chart");
+                        let mut count_frame = Frame::new(1000, 850, 40, 30, "Count Pie chart");
+
+                    
+                        popup.show();
+                        popup.end();
+                    });
+                }
+                if let Some(mut item) = menu_bar.find_item("&Configurations/Edit\t"){
+                    item.set_callback(move |_|{
+                        let mut popup = Window::new(600, 600, 400, 350, "Edit Configurations");
+                        // let filesOnlylabel = format!("Include Files: ");
+                        // let mut filesOnly = Frame::new(70, 10, 70, 30, "");
+                        // filesOnly.set_label(&filesOnlylabel);
+                        // filesOnly.set_label_size(18);
+
+                        let mut include_files_choice = menu::Choice::new(150, 10, 100, 30, "Include Files: ");
+                        include_files_choice.add_choice(" Yes | No");
+                        include_files_choice.set_value(0);
+                        include_files_choice.set_color(enums::Color::White);
+
+                        let mut include_hidden_choice = menu::Choice::new(150, 50, 100, 30, "Include Hidden Files: ");
+                        include_hidden_choice.add_choice(" Yes | No");
+                        include_hidden_choice.set_value(0);
+                        include_hidden_choice.set_color(enums::Color::White);
+
+                        let mut depth_input = Input::new(150, 90, 100, 30, "");
+                        let mut depth_label = Frame::new(45, 90, 70, 30, "Max Scanning Depth: ");
+                        depth_label.set_label_size(14);
+                        depth_input.set_value("3");
+                        
+
+                        let mut minsize_input = Input::new(150, 130, 100, 30, "");
+                        let mut minsize_label = Frame::new(45, 130, 70, 30, "Min File Size: ");
+                        minsize_label.set_label_size(14);
+                        minsize_input.set_value("500");                       
+                        let mut min_size_unit = menu::Choice::new(300, 130, 80, 30, "Unit: ");
+                        min_size_unit.add_choice(" Bytes | KBs | MBs | GBs ");
+                        min_size_unit.set_value(0);
+                        min_size_unit.set_color(enums::Color::White);
+
+                        let mut maxsize_input = Input::new(150, 170, 100, 30, "");
+                        let mut maxsize_label = Frame::new(45, 170, 70, 30, "Max File Size: ");
+                        maxsize_label.set_label_size(14);
+                        maxsize_input.set_value("500");                       
+                        let mut max_size_unit = menu::Choice::new(300, 170, 80, 30, "Unit: ");
+                        max_size_unit.add_choice(" Bytes | KBs | MBs | GBs ");
+                        max_size_unit.set_value(0);
+                        max_size_unit.set_color(enums::Color::White);
+                        
+                        let mut regex_choice = menu::Choice::new(150, 210, 100, 30, "Use Regex: ");
+                        regex_choice.add_choice(" Yes | No");
+                        regex_choice.set_value(0);
+                        regex_choice.set_color(enums::Color::White);
+
+                        let mut regex_input = Input::new(150, 250, 100, 30, "");
+                        let mut regex_label = Frame::new(45, 250, 70, 30, "Regex Pattern: ");
+                        regex_label.set_label_size(14);
+                        regex_input.set_value(".rs$");
+                        
+                        let mut Edit_button = Button::new(150, 290, 70, 30, "Edit!");
+
+
+                        popup.show();
+                        popup.end();
+
+                    });
+                }
+                //let mut configs = configs.clone(); // Cloning the data
                 if let Some(mut item) = menu_bar.find_item("&Configurations/View\t") {
                     item.set_callback(move |_|{
+                        let Ok(configs) = read_configurations_from_json("configs.json") else { todo!() };   
+
                         let mut popup = Window::new(600, 600, 400, 400, "View Configurations");
                         let filesOnlylabel = format!("Include Files:   {}", configs.is_file);
                         let mut filesOnly = Frame::new(70, 10, 70, 30, "");
@@ -357,7 +518,8 @@ fn main() {
                         popup.end();
                     });
                 }
-                let mut chart = Chart::new(2000, 400, 2000, 2000, "");        chart.set_type(misc::ChartType::Pie);
+                let mut chart = Chart::new(2000, 400, 2000, 2000, "");    
+                chart.set_type(misc::ChartType::Pie);
                 chart.set_bounds(0.0, 100.0);
                 chart.set_text_size(18);
                 let mut chart_colne = chart.clone();
@@ -371,7 +533,7 @@ fn main() {
                     chart_colne.set_type(misc::ChartType::from_i32(c.value()+5));
                     chart_colne.redraw();
                 });
-                let filtered_result = filter_items(&scanned_result, &configs);
+                // println!("{:?}",extension_groups);
                 let depth_one_items = get_depth_one_items(&filtered_result);
                 let mut size_temp = filtered_result.size;
                 let mut size_unit = "Bytes";
