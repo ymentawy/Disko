@@ -25,7 +25,7 @@ use fltk_theme::ColorTheme;
 use serde::Serialize;
 use serde::Deserialize;
 use regex::Regex;
-
+use fltk_theme::{SchemeType, WidgetScheme};
 use fltk::{
     app, dialog,
     enums::{CallbackTrigger,  Font},
@@ -259,28 +259,59 @@ fn format_grouped_data(file_groups: &HashMap<String, (u64, usize)>) -> String {
 
     result
 }
+fn group_by_size(filtered_result: &DiskItem) -> HashMap<String, (usize, u64)> {
+    let mut size_groups: HashMap<String, (usize, u64)> = HashMap::new();
+
+    // Group items by size categories
+    fn categorize_size(item: &DiskItem, size_groups: &mut HashMap<String, (usize, u64)>) {
+        let size_category = if item.size < 1024 {
+            "Below 1KB".to_string()
+        } else if item.size < 1024 * 1024 {
+            "Between 1KB and 1MB".to_string()
+        } else if item.size < 1024 * 1024 * 1024 {
+            "Between 1MB and 1GB".to_string()
+        } else {
+            "Above 1GB".to_string()
+        };
+
+        let entry = size_groups.entry(size_category).or_insert((0, 0));
+        entry.0 += 1; // Increment item count
+        entry.1 += item.size; // Add item size to the total size
+
+        for child in &item.children {
+            categorize_size(child, size_groups);
+        }
+    }
+
+    categorize_size(filtered_result, &mut size_groups);
+    size_groups
+}
+
+fn format_grouped_size_data(size_groups: &HashMap<String, (usize, u64)>) -> String {
+    let mut result = String::new();
+
+    for (size_category, (item_count, total_size)) in size_groups {
+        result.push_str(&format!(
+            "Size Category: {} - Total size: {} bytes - Number of files: {}\n",
+            size_category, total_size, item_count
+        ));
+        result.push('\n');
+    }
+
+    result
+}
 
 fn main() {
-    /*
-    let directory_path = Path::new("/home/youssif-abuzied/Desktop");
-    let configs = Configurations {
-        is_file: true, // Set to false to display only folders, true for both files and folders
-        max_depth: 1,
-        include_hidden_files : true,   // Adjust depth as needed
-    };
-
-    match scan_directory(&directory_path, 0) {
-        Ok(scanned_result) => {
-            let filtered_result = filter_items(&scanned_result, &configs);
-            println!("{:#?}", filtered_result);
-        }
-        Err(e) => eprintln!("Error: {}", e),
-    }*/
+   
     let app = app::App::default().with_scheme(app::Scheme::Gtk);
     let (s, r) = app::channel::<Message>();
 
-    let theme = ColorTheme::new(color_themes::TAN_THEME);
+    let theme = ColorTheme::new(color_themes::BLACK_THEME);
     theme.apply();
+    let widget_theme = WidgetTheme::new(ThemeType::AquaClassic);
+    widget_theme.apply();
+    // let scheme = WidgetScheme::new(SchemeType::Clean);
+    // scheme.apply();
     let mut wind = window::Window::new(100, 100, 800, 600, "Welcome Screen");
     //let mut frame = Frame::default().with_size(200, 100).center_of(&wind);
     let mut but = Button::new(360, 320, 65, 30, "Scan!");
@@ -341,6 +372,7 @@ fn main() {
                 let mut new_wind = Window::new(0, 0, 4000, 3000, "New Window");
                 let filtered_result = filter_items(&scanned_result, &configs);
                 let mut filtered_result2 = filtered_result.clone();
+                let mut filtered_result3 = filtered_result.clone();
                 
                 wind_clone.hide();
                 new_wind.make_resizable(true);
@@ -363,6 +395,60 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Grouped By extension!"),
                 );
+                menu_bar.add(
+                    "&Group/By Size\t",
+                    Shortcut::Ctrl | 'z',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Grouped By Size!"),
+                );
+                if let Some(mut item) = menu_bar.find_item("&Group/By Size\t"){
+                    item.set_callback(move |_| {
+                        let mut popup = Window::new(600, 600, 1500, 1300, "Group files by size");
+
+                        let extension_groups = group_by_size(&filtered_result3);
+                        let formatted_data = format_grouped_size_data(&extension_groups);  
+                        let mut groups_frame = Frame::new(70, 20, 500, 200, "");
+                        groups_frame.set_label(&formatted_data);
+                        groups_frame.set_label_size(14);
+
+                        let mut size_chart = Chart::new(20, 300, 700, 500, "");    
+                        size_chart.set_type(misc::ChartType::Pie);
+                        size_chart.set_bounds(0.0, 100.0);
+                        size_chart.set_text_size(10);
+
+                        let mut count_chart = Chart::new(800, 300, 700, 500, "");    
+                        count_chart.set_type(misc::ChartType::Pie);
+                        count_chart.set_bounds(0.0, 100.0);
+                        count_chart.set_text_size(10);
+
+                        let colors = [
+                            enums::Color::Red,
+                            enums::Color::Blue,
+                            enums::Color::Green,
+                            enums::Color::Magenta,
+                            enums::Color::Cyan,
+                            enums::Color::Yellow,
+                            enums::Color::DarkRed,
+                            // Add more colors as needed
+                        ];
+                        let mut color_cycle1 = colors.iter().cycle();
+                        let mut color_cycle2 = colors.iter().cycle();
+
+                        for  (file_type, (file_count, total_size))in extension_groups{
+                            let color = color_cycle1.next().unwrap_or(&enums::Color::Black);
+                            size_chart.add(total_size as f64, &file_type,*color);
+                            let color = color_cycle2.next().unwrap_or(&enums::Color::Black);
+                            count_chart.add(file_count as f64, &file_type,*color);
+                        }
+
+                        let mut size_frame = Frame::new(300, 850, 40, 30, "Size Pie chart");
+                        let mut count_frame = Frame::new(1000, 850, 40, 30, "Count Pie chart");
+
+                    
+                        popup.show();
+                        popup.end();
+                    });
+                }
                 if let Some(mut item) = menu_bar.find_item("&Group/By Extension\t"){
                     item.set_callback(move |_| {
                         let mut popup = Window::new(600, 600, 1400, 1300, "Group files by extension");
