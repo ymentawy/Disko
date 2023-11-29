@@ -311,6 +311,7 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Opened file!"),
                 );
+            
                 let mut configs = configs.clone(); // Cloning the data
                 if let Some(mut item) = menu_bar.find_item("&Configurations/View\t") {
                     item.set_callback(move |_|{
@@ -372,7 +373,23 @@ fn main() {
                 });
                 let filtered_result = filter_items(&scanned_result, &configs);
                 let depth_one_items = get_depth_one_items(&filtered_result);
-            
+                let mut size_temp = filtered_result.size;
+                let mut size_unit = "Bytes";
+                if(size_temp >= (1024*1024*1024)){
+                    size_temp = size_temp / (1024*1024*1024);
+                    size_unit = "GBs";
+                }else if (size_temp >= (1024*1024)){
+                    size_temp = size_temp / (1024*1024);
+                    size_unit = "MBs";
+                }else if(size_temp >= 1024){
+                    size_temp = size_temp / (1024);
+                    size_unit = "KBs";
+                }
+                 let Sizelabel = format!("Directory size =  {} {}", size_temp, size_unit);
+                 let mut size_frame = Frame::new(3000, 2500, 200, 30, "");
+                 size_frame.set_label(&Sizelabel);
+                 size_frame.set_label_size(18);
+                
                 // Display or work with the items at depth 1
                 let colors = [
                     enums::Color::Red,
