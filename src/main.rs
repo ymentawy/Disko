@@ -64,12 +64,51 @@ pub enum Message {
 #[derive(Clone)]
 struct Configurations {
     is_file: bool,
-    max_depth: usize,
+    max_depth: u64,
     include_hidden_files: bool,
     min_size: u64, // Minimum size in bytes
     max_size: u64, // Maximum size in bytes
     use_regex: bool, // Indicates whether to use regex
     regex_pattern: StdOption<String>, // Holds the regex pattern if use_regex is true
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone)]
+struct AppConfig {
+    is_file: bool,
+    max_depth: u64,
+    include_hidden_files: bool,
+    min_size: u64,
+    max_size: u64,
+    use_regex: bool,
+    regex_pattern: String,
+}
+
+fn validate_config(config: &AppConfig) -> Result<(), String> {
+    // Validate include_files and include_hidden_files
+    // (Assuming these values can't be invalid, considering they're booleans)
+
+    // Validate max_depth
+    if config.max_depth <= 0 {
+        return Err(String::from("max_depth should be greater than 0"));
+    }
+
+    // Validate min_size and max_size
+    if config.min_size > config.max_size {
+        return Err(String::from("Invalid size constraints"));
+    }
+
+    // Validate regex_pattern if use_regex is true
+    if config.use_regex {
+        // Check if the regex pattern is valid
+        match regex::Regex::new(&config.regex_pattern) {
+            Ok(_) => {}
+            Err(_) => return Err(String::from("Invalid regex pattern")),
+        }
+    }
+
+    // All validations passed, return Ok(())
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -81,11 +120,16 @@ struct DiskItem {
     last_accessed: StdOption<String>,
     last_modified: StdOption<String>,
     created: StdOption<String>,
-    depth: usize,
+    depth: u64,
     path: String,
     children: Vec<DiskItem>,
 }
-
+fn convert_to_integer(value: &str) -> Result<u64, String> {
+    match value.parse::<i32>() {
+        Ok(num) => Ok(num.try_into().unwrap()),
+        Err(_) => Err(String::from("Failed to parse string as integer")),
+    }
+}
 fn calculate_disk_usage(item: &DiskItem) -> u64 {
     if item.is_file {
         item.size
@@ -102,7 +146,7 @@ fn format_system_time(st: StdOption<SystemTime>) -> StdOption<String> {
     })
 }
 
-fn scan_directory(path: &Path, depth: usize) -> io::Result<DiskItem> {
+fn scan_directory(path: &Path, depth: u64) -> io::Result<DiskItem> {
     let metadata = fs::metadata(path)?;
     let path_str = path.to_string_lossy().into_owned();
 
@@ -113,7 +157,7 @@ fn scan_directory(path: &Path, depth: usize) -> io::Result<DiskItem> {
         last_accessed: format_system_time(metadata.accessed().ok()),
         last_modified: format_system_time(metadata.modified().ok()),
         created: format_system_time(metadata.created().ok()),
-        depth,
+        depth: depth,
         path: path_str,
         children: Vec::new(),
     };
@@ -154,7 +198,7 @@ fn check_file(item: &DiskItem, configs: &Configurations) -> bool {
        // println!("{}", pattern);
         let re = Regex::new(&pattern).unwrap();
         let m = re.is_match(&item.name);
-        if(m){
+        if(!m){
             res = true;
         }
     }
@@ -540,7 +584,7 @@ fn main() {
                 }
                 if let Some(mut item) = menu_bar.find_item("&Configurations/Edit\t"){
                     item.set_callback(move |_|{
-                        let mut popup = Window::new(600, 600, 400, 350, "Edit Configurations");
+                        let mut popup = Window::new(600, 600, 400, 400, "Edit Configurations");
                         // let filesOnlylabel = format!("Include Files: ");
                         // let mut filesOnly = Frame::new(70, 10, 70, 30, "");
                         // filesOnly.set_label(&filesOnlylabel);
@@ -591,10 +635,69 @@ fn main() {
                         regex_input.set_value(".rs$");
                         
                         let mut Edit_button = Button::new(150, 290, 70, 30, "Edit!");
+                        let mut error_label = Frame::new(10, 330, 380, 30, "");
+                        let mut popup3 = popup.clone();
+                        Edit_button.set_callback(move |_|{
+                            let mut err :bool = false;
+                        //    let mut val :String = "";
+                            let mut depth:u64 = 0;
+                            match convert_to_integer(&depth_input.value()) {
+                                Ok(result) => depth = result,
+                                Err(err) => error_label.set_label(&"Error! Please Check the values you enetered."),
+                            }
+
+                            let mut mini_size:u64 = 0;
+                            match convert_to_integer(&minsize_input.value()) {
+                                Ok(result) => mini_size = result,
+                                Err(err) => error_label.set_label(&"Error! Please Check the values you enetered."),
+                            }
+
+                            let mut maxi_size:u64 = 0;
+                            match convert_to_integer(&maxsize_input.value()) {
+                                Ok(result) => maxi_size = result,
+                                Err(err) => error_label.set_label(&"Error! Please Check the values you enetered."),
+                            }
+
+                            let include_files_in : bool = (include_files_choice.value() == 0);
+                            let include_hidden_files_in : bool = (include_hidden_choice.value() == 0);
+                            let use_regex_in:bool = (regex_choice.value() == 0);
+                            let regex_pattern_in : String = regex_input.value();
+
+                            let base:u64 = 1024;
+                            maxi_size = maxi_size * (base.pow(max_size_unit.value().try_into().unwrap()));
+                            mini_size = mini_size*(base.pow(min_size_unit.value().try_into().unwrap()));
+                            let temp_config = AppConfig {
+                                is_file: include_files_in,
+                                include_hidden_files: include_hidden_files_in,
+                                max_depth: depth,
+                                min_size: mini_size,
+                                max_size: maxi_size,
+                                use_regex: use_regex_in,
+                                regex_pattern: regex_pattern_in,
+                            };
+
+                            match validate_config(&temp_config) {
+                                Ok(_) => {
+                                    let mut popup2 = popup.clone();
+
+                                    let serialized = serde_json::to_string(&temp_config).expect("Serialization failed");
+
+                                    // Write the JSON string to a file
+                                    let mut json_file = File::create("configs.json").expect("File creation failed");
+                                    json_file.write_all(serialized.as_bytes()).expect("Write failed");
+
+                                    popup2.hide();
+                                    
+                                },
+                                Err(err) => error_label.set_label(&"Error! Please Check the values you enetered."),
+                            }
+                        
+
+                        });
 
 
-                        popup.show();
-                        popup.end();
+                        popup3.show();
+                        popup3.end();
 
                     });
                 }
