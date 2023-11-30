@@ -38,6 +38,10 @@ use std::{
     ops::{Deref, DerefMut},
     path,
 };
+use std::ffi::OsStr;
+use dirs::home_dir;
+use fltk::tree::Tree;
+use fltk::tree::TreeSelect;
 
 #[derive(Copy, Clone)]
 #[derive(PartialEq)]
@@ -300,7 +304,42 @@ fn format_grouped_size_data(size_groups: &HashMap<String, (usize, u64)>) -> Stri
 
     result
 }
+fn is_hidden(entry: &fs::DirEntry) -> bool {
+    entry.file_name()
+        .to_string_lossy()
+        .starts_with(".")
+}
+fn build_directory_tree(tree: &mut Tree, path: &PathBuf) {
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                if !is_hidden(&entry) {
+                    let file_type = entry.file_type().ok();
+                    let entry_path = entry.path();
+                    let entry_path_str = entry_path.to_string_lossy().to_string();
 
+                    if let Some(file_type) = file_type {
+                        if file_type.is_dir() {
+                            // Add directory to the tree
+                            tree.add(&entry_path_str);
+                            if let Some(path_str) = path.to_str() {
+                                tree.close(path_str,false);
+                            } else {
+                                println!("Failed to close");
+
+                            }
+                            // Recursively build tree for the subdirectory
+                            build_directory_tree(tree, &entry_path);
+                        } else if file_type.is_file() {
+                            // Add file to the tree (if needed)
+                            tree.add(&entry_path_str);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 fn main() {
    
     let app = app::App::default().with_scheme(app::Scheme::Gtk);
@@ -366,6 +405,8 @@ fn main() {
     
         let Ok(configs) = read_configurations_from_json("configs.json") else { todo!() };   
         let mut clone_configgs = configs.clone();
+
+        let mut dir_path = directory_path.clone();
         match scan_directory(&directory_path, 0) {
             
                 Ok(scanned_result) => {
@@ -649,13 +690,21 @@ fn main() {
                     enums::Color::DarkRed,
                     // Add more colors as needed
                 ];
+                let mut tree = Tree::new(100, 400, 1800, 2000, "");
+                tree.set_select_mode(TreeSelect::Multi);
                 let mut color_cycle = colors.iter().cycle();
                 for item in depth_one_items {
                     println!("{:#?}", item);
                     let color = color_cycle.next().unwrap_or(&enums::Color::Black);
                     chart.add(item.size as f64, &item.name,*color)
                 }
-              
+                let path_buf: PathBuf = dir_path.to_path_buf();
+                if let Some(home_dir) = home_dir() {
+                    build_directory_tree(&mut tree, &path_buf);
+                } else {
+                    eprintln!("Unable to determine the user's home directory.");
+                }
+                tree.callback_item();
                 new_wind.show();
                 new_wind.end();
              
