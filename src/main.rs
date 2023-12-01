@@ -25,6 +25,7 @@ use fltk_theme::ColorTheme;
 use serde::Serialize;
 use serde::Deserialize;
 use regex::Regex;
+use fltk::enums::Align;
 use fltk_theme::{SchemeType, WidgetScheme};
 use fltk::{
     app, dialog,
@@ -59,7 +60,8 @@ pub enum Message {
     //Paste,
     //About,
 }
-
+use std::cell::RefCell;
+use std::rc::Rc;
 #[derive(Debug, Serialize, Deserialize)]
 #[derive(Clone)]
 struct Configurations {
@@ -214,7 +216,27 @@ fn read_configurations_from_json(file_path: &str) -> Result<Configurations, Box<
 
     Ok(configurations)
 }
+fn get_files_sorted_by_size(item: &DiskItem) -> Vec<&DiskItem> {
+    let mut files: Vec<&DiskItem> = vec![];
 
+    // Function to collect files recursively
+    fn collect_files<'a>(item: &'a DiskItem, files: &mut Vec<&'a DiskItem>) {
+        if item.is_file {
+            files.push(item);
+        } else {
+            for child in &item.children {
+                collect_files(child, files);
+            }
+        }
+    }
+
+    collect_files(item, &mut files);
+
+    // Sort files by size in descending order
+    files.sort_by(|a, b| b.size.cmp(&a.size)); // Reverse order here (b.size.cmp(&a.size))
+
+    files
+}
 fn filter_items(item: &DiskItem, configs: &Configurations) -> DiskItem {
     let mut filtered_item = DiskItem {
         name: item.name.clone(),
@@ -482,10 +504,147 @@ fn main() {
                 );
                 menu_bar.add(
                     "&Group/By Size\t",
-                    Shortcut::Ctrl | 'z',
+                    Shortcut::Ctrl | 'g',
                     menu::MenuFlag::Normal,
                         |_| println!("Grouped By Size!"),
                 );
+                menu_bar.add(
+                    "&Get files Sorted/By Size\t",
+                    Shortcut::Ctrl | 'r',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Sorted by size!"),
+                );
+                let filtered_2  = filtered_result.clone();
+                if let Some(mut item) = menu_bar.find_item("&Get files Sorted/By Size\t"){
+                    item.set_callback(move |_|{
+                        let mut popup = Window::new(600, 600, 800, 800, "Sort files by size");
+                        let mut sorted = get_files_sorted_by_size(&filtered_2);
+                        let mut file_name_frame = Frame::new(50, 50, 450, 600, "");
+                        let mut file_size_frame = Frame::new(600, 50, 150, 600, "");
+                        let mut name_content = String::from("File Name: \n \n");
+                        let mut size_content = String::from("File Size \n \n");
+                        let length = sorted.len();
+                        let mut count : u64 = 0;
+                        for file in &sorted {
+                            //println!("File: {} - Size: {} bytes", file.name, file.size);
+                            let mut temp:String = format!("{}. {} \n",count+1, file.name);
+                            let mut temp2:String = format!("{}  Bytes\n", file.size);
+                            name_content.push_str(&temp);
+                            size_content.push_str(&temp2);
+                            count = count +1;
+
+                            if(count %20 == 0 || (count as usize) == length){
+                                let mut file_write = File::create("count.txt").expect("Unable to create file");
+                                file_write.write_all(&count.to_le_bytes())
+                                    .expect("Unable to write to file");
+                                break;
+                            }
+                          
+                        }
+                        file_name_frame.set_label(&name_content);
+                        file_name_frame.set_label_size(20);
+                        file_name_frame.set_align(Align::Left | Align::Inside);
+                        
+                        file_size_frame.set_label(&size_content);
+                        file_size_frame.set_label_size(20);
+                        file_size_frame.set_align(Align::Left | Align::Inside);
+
+                        let mut back_but = Button::new(200, 700, 65, 30, "Back!");
+                        let mut next_but = Button::new(535, 700, 65, 30, "Next!");
+                        let mut filtered_22 = filtered_2.clone();
+                        let mut file_name_frame_clone = file_name_frame.clone();
+                        let mut file_size_frame_clone = file_size_frame.clone();
+                        
+
+                        let mut filtered_23 = filtered_2.clone();
+                 
+                        next_but.set_callback(move |_|{
+                            println!("{}", count);
+                            let mut file_read = File::open("count.txt").expect("Unable to open file");
+                            let mut buffer = [0; 8]; // 8 bytes for a u64 value
+                            file_read.read_exact(&mut buffer)
+                                .expect("Unable to read from file");
+                                count = u64::from_le_bytes(buffer);
+                            if(count < length.try_into().unwrap()){
+                                let mut sorted2 = get_files_sorted_by_size(&filtered_23);
+                                let mut begin : u64 = count;
+                                let mut end: u64 = std::cmp::min(length.try_into().unwrap(), count +20);
+                                let mut temp_count = 0;
+                                println!("{},  {}", begin, end);
+                                let mut temp_name_content = String::from("File Name: \n \n");
+                                let mut temp_size_content = String::from("File Size \n \n");
+                                for temp_file in &sorted2{
+                                    if(temp_count >= begin && temp_count < end){
+                                        let mut temp:String = format!("{}. {} \n",temp_count+1, temp_file.name);
+                                        let mut temp2:String = format!("{}  Bytes\n", temp_file.size);
+                                        temp_name_content.push_str(&temp);
+                                        temp_size_content.push_str(&temp2);
+                                    }
+                                    temp_count += 1;
+                                }
+                                file_name_frame_clone.set_label(&temp_name_content);
+                                file_size_frame_clone.set_label(&temp_size_content);
+                                count = end;
+                                let mut file_write = File::create("count.txt").expect("Unable to create file");
+                                file_write.write_all(&count.to_le_bytes())
+                                    .expect("Unable to write to file");
+                                                            
+                            }
+                        });
+                        back_but.set_callback(move |_|{
+                            //let mut sorted2 = sorted.clone();
+                            let mut file_read = File::open("count.txt").expect("Unable to open file");
+                            let mut buffer = [0; 8]; // 8 bytes for a u64 value
+                            file_read.read_exact(&mut buffer)
+                                .expect("Unable to read from file");
+                                count = u64::from_le_bytes(buffer);
+
+                            println!("{}", count);
+                            if(count > 20){
+                                let mut sorted2 = get_files_sorted_by_size(&filtered_22);
+                                
+                                let mut begin : u64 = 0;
+                                if(count%20 != 0){
+                                    begin = count - count%20-20;
+                                }else{
+                                    begin = count - 40;
+                                }
+                                let mut end: u64 = 0;
+                                if(count%20 != 0){
+                                    end = count - count%20;
+                                }else{
+                                    end = count -20;
+                                }
+                                let mut temp_count = 0;
+                                let mut temp_name_content = String::from("File Name: \n \n");
+                                let mut temp_size_content = String::from("File Size \n \n");
+                                for temp_file in &sorted2{
+                                    if(temp_count >= begin && temp_count < end){
+                                        let mut temp:String = format!("{}. {} \n",temp_count+1, temp_file.name);
+                                        let mut temp2:String = format!("{}  Bytes\n", temp_file.size);
+                                        temp_name_content.push_str(&temp);
+                                        temp_size_content.push_str(&temp2);
+                                        count -=1;
+
+                                    }
+                                    temp_count += 1;
+                                }
+                                file_name_frame.set_label(&temp_name_content);
+                                file_size_frame.set_label(&temp_size_content);
+                                count = end;
+                                let mut file_write = File::create("count.txt").expect("Unable to create file");
+                                file_write.write_all(&count.to_le_bytes())
+                                    .expect("Unable to write to file");
+                            }
+                        });
+                        popup.show();
+                        popup.end();
+                        
+
+                    }
+                    );
+
+                }                
                 if let Some(mut item) = menu_bar.find_item("&Group/By Size\t"){
                     item.set_callback(move |_| {
                         let mut popup = Window::new(600, 600, 1500, 1300, "Group files by size");
@@ -751,7 +910,7 @@ fn main() {
                 let mut chart = Chart::new(2000, 400, 2000, 2000, "");    
                 chart.set_type(misc::ChartType::Pie);
                 chart.set_bounds(0.0, 100.0);
-                chart.set_text_size(18);
+                chart.set_text_size(14);
                 let mut chart_colne = chart.clone();
                 let mut choice = menu::Choice::new(2800, 200, 400, 150, "Chart type");
                 choice.add_choice(" Pie | SpecialPie");
