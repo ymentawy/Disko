@@ -140,6 +140,35 @@ fn calculate_disk_usage(item: &DiskItem) -> u64 {
         children_size
     }
 }
+fn sort_files_by_access_time_and_size(filtered_result: &DiskItem, min_size: u64) -> Vec<&DiskItem> {
+    let mut files: Vec<&DiskItem> = vec![];
+    // Function to collect files recursively
+    fn collect_files<'a>(item: &'a DiskItem, files: &mut Vec<&'a DiskItem>) {
+        if item.is_file {
+            files.push(item);
+        } else {
+            for child in &item.children {
+                collect_files(child, files);
+            }
+        }
+    }
+    collect_files(filtered_result, &mut files);
+    // Filter files by size (minimum size)
+    files.sort_by(|a, b| a.last_accessed.clone().expect("REASON").to_lowercase().cmp(&b.last_accessed.clone().expect("REASON").to_lowercase()));
+    let mut accumulated_size = 0;
+    let mut selected_files = Vec::new();
+
+    for file in files {
+        if accumulated_size >= min_size {
+            break;
+        }
+        accumulated_size += file.size;
+        selected_files.push(file);
+    }
+
+    selected_files    
+}
+
 fn get_files_sorted_alphabetically_recursive(item: &DiskItem) -> Vec<&DiskItem> {
     let mut files: Vec<&DiskItem> = vec![];
 
@@ -539,9 +568,127 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Sorted by name!"),
                 );
+                menu_bar.add(
+                    "&Get/Clean Up Recommendations\t",
+                    Shortcut::Ctrl | 'd',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Clean Up recommendations!"),
+                );
+                
                 let filtered_2  = filtered_result.clone();
                 let filtered_3 = filtered_result.clone();
-                
+                let filtered_4 = filtered_result.clone();
+                if let Some(mut item) = menu_bar.find_item("&Get/Clean Up Recommendations\t"){
+                    item.set_callback(move |_|{
+                        let mut popup = Window::new(600, 600, 800, 800, "Clean Up Recommendations");
+                        let mut size_frame = Frame::new(40, 40, 200, 30, "Enter the size you want to free: ");
+                        let mut size_input = Input::new(300, 40, 100, 30, "");
+                        size_input.set_value("1024");
+                        let mut size_unit_choice = menu::Choice::new(450, 40, 100, 30, "Unit: ");
+                        size_unit_choice.add_choice("Bytes|KBs|MBs|GBs");
+                        size_unit_choice.set_value(0);
+                        size_unit_choice.set_color(enums::Color::White);
+                        let mut clean_but = Button::new(600, 40, 100, 30, "Recommend!");
+                        let mut error_frame = Frame::new(100, 80, 600, 30, "");
+                        let filtered_41 =  filtered_4.clone();
+                        let mut error: bool = false;
+
+                        let mut file_name_frame = Frame::new(50, 50, 200, 600, "");
+                        let mut file_size_frame = Frame::new(600, 50, 150, 600, "");
+                        let mut file_access_frame = Frame::new(300, 50, 250, 600, "");
+                        let mut name_content = String::from("File Name: \n \n");
+                        let mut size_content = String::from("File Size \n \n");
+                        let mut access_content = String::from("Last Accessed \n \n");
+                        clean_but.set_callback(move |_|{ 
+                            let mut size: u64 = 0;
+                            match convert_to_integer(&size_input.value()) {
+                                Ok(result) => {size = result; error = false;},
+                                Err(err) => {error_frame.set_label(&"Error! Please Check the values you enetered."); error = true;},
+                            }
+
+                            
+                            let base:u64 = 1024;
+                            size = size * (base.pow(size_unit_choice.value().try_into().unwrap()));
+                            if (error){
+                                error_frame.set_label(&"Error! Please Check the values you enetered.");   
+                                file_name_frame.set_label("");
+                                file_name_frame.set_label_size(14);
+                                file_name_frame.set_align(Align::Left | Align::Inside);
+                                
+                                file_size_frame.set_label("");
+                                file_size_frame.set_label_size(14);
+                                file_size_frame.set_align(Align::Left | Align::Inside);
+
+                                file_access_frame.set_label("");
+                                file_access_frame.set_label_size(14);
+                                file_access_frame.set_align(Align::Left | Align::Inside); 
+
+                                name_content = "File Name: \n \n".to_string();
+                                size_content = "File Size \n \n".to_string();
+                                access_content = "Last Accessed \n \n".to_string();
+                            }
+                            else if(filtered_41.size < size ){
+                                error_frame.set_label(&"Error! Cleanup size is greater than the directory size.");
+                                file_name_frame.set_label("");
+                                file_name_frame.set_label_size(14);
+                                file_name_frame.set_align(Align::Left | Align::Inside);
+                                
+                                file_size_frame.set_label("");
+                                file_size_frame.set_label_size(14);
+                                file_size_frame.set_align(Align::Left | Align::Inside);
+
+                                file_access_frame.set_label("");
+                                file_access_frame.set_label_size(14);
+                                file_access_frame.set_align(Align::Left | Align::Inside);
+
+                                name_content = "File Name: \n \n".to_string();
+                                size_content = "File Size \n \n".to_string();
+                                access_content = "Last Accessed \n \n".to_string();
+                            }
+                            else{
+                                let recommendations_res = sort_files_by_access_time_and_size(&filtered_41, size);
+                                error_frame.set_label(&"You can consider removing those files!");
+                                let mut count:u64 = 0;
+                                for file in recommendations_res {
+                                    //println!("File: {} - Size: {} bytes - Last Access Time: {:?}", file.name, file.size, file.last_accessed);
+                                    let mut temp1:String = format!("{}. {} \n",count+1, file.name);
+                                    let mut temp2:String = format!("{}  Bytes\n", file.size);
+                                    let mut temp3:String = "".to_string();
+                                    if let Some(value) = &file.last_accessed {
+                                        temp3 = format!("{} \n", value);
+                                    } else {
+                                        println!("Option is None");
+                                    }
+                                    name_content.push_str(&temp1);
+                                    size_content.push_str(&temp2);
+                                    access_content.push_str(&temp3);
+                                }
+                                file_name_frame.set_label(&name_content);
+                                file_name_frame.set_label_size(14);
+                                file_name_frame.set_align(Align::Left | Align::Inside);
+                                
+                                file_size_frame.set_label(&size_content);
+                                file_size_frame.set_label_size(14);
+                                file_size_frame.set_align(Align::Left | Align::Inside);
+
+                                file_access_frame.set_label(&access_content);
+                                file_access_frame.set_label_size(14);
+                                file_access_frame.set_align(Align::Left | Align::Inside);
+
+                                
+                            }
+                            
+                                                        
+                        });
+                        
+                     
+
+                        popup.show();
+                        popup.end();
+
+
+                    });
+                }
                 if let Some(mut item) = menu_bar.find_item("&Get files Sorted/By Size\t"){
                     item.set_callback(move |_|{
                         let mut popup = Window::new(600, 600, 800, 800, "Sort files by size");
