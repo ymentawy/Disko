@@ -1,1 +1,1 @@
-{"is_file":true,"max_depth":3,"include_hidden_files":true,"min_size":500,"max_size":536870912000,"use_regex":false,"regex_pattern":".rs$"}
+{"is_file":true,"max_depth":3,"include_hidden_files":true,"min_size":0,"max_size":512000,"use_regex":false,"regex_pattern":".rs$"}
