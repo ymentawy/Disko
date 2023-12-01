@@ -27,6 +27,8 @@ use serde::Deserialize;
 use regex::Regex;
 use fltk::enums::Align;
 use fltk_theme::{SchemeType, WidgetScheme};
+use std::ffi::CString;
+use libc::{statvfs, c_char};
 use fltk::{
     app, dialog,
     enums::{CallbackTrigger,  Font},
@@ -195,7 +197,21 @@ fn format_system_time(st: StdOption<SystemTime>) -> StdOption<String> {
         datetime.format("%Y-%m-%d %H:%M").to_string()
     })
 }
+fn get_free_space(directory: &str) -> u64 {
+    let path = Path::new(directory);
+    let c_path = CString::new(directory).expect("CString::new failed");
+    let mut buf: statvfs = unsafe { std::mem::zeroed() };
 
+    if let Ok(metadata) = fs::metadata(&path) {
+        if unsafe { statvfs(c_path.as_ptr() as *const c_char, &mut buf) } == 0 {
+            let free_space = buf.f_bsize as u64 * buf.f_bfree as u64;
+            return free_space;
+        }
+    }
+
+    // Return 0 if there's an error or the directory doesn't exist
+    0
+}
 fn scan_directory(path: &Path, depth: u64) -> io::Result<DiskItem> {
     let metadata = fs::metadata(path)?;
     let path_str = path.to_string_lossy().into_owned();
@@ -454,6 +470,21 @@ fn build_directory_tree(tree: &mut Tree, path: &PathBuf) {
         }
     }
 }
+fn format_size(size_in_bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    
+    if size_in_bytes < KB {
+        format!("{} bytes", size_in_bytes)
+    } else if size_in_bytes < MB {
+        format!("{:.2} KB", size_in_bytes as f64 / KB as f64)
+    } else if size_in_bytes < GB {
+        format!("{:.2} MB", size_in_bytes as f64 / MB as f64)
+    } else {
+        format!("{:.2} GB", size_in_bytes as f64 / GB as f64)
+    }
+}
 fn main() {
    
     let app = app::App::default().with_scheme(app::Scheme::Gtk);
@@ -521,6 +552,7 @@ fn main() {
         let mut clone_configgs = configs.clone();
 
         let mut dir_path = directory_path.clone();
+        let mut contents2 = contents.clone();
         match scan_directory(&directory_path, 0) {
             
                 Ok(scanned_result) => {
@@ -649,6 +681,9 @@ fn main() {
                                 let recommendations_res = sort_files_by_access_time_and_size(&filtered_41, size);
                                 error_frame.set_label(&"You can consider removing those files!");
                                 let mut count:u64 = 0;
+                                name_content = "File Name: \n \n".to_string();
+                                size_content = "File Size \n \n".to_string();
+                                access_content = "Last Accessed \n \n".to_string();
                                 for file in recommendations_res {
                                     //println!("File: {} - Size: {} bytes - Last Access Time: {:?}", file.name, file.size, file.last_accessed);
                                     let mut temp1:String = format!("{}. {} \n",count+1, file.name);
@@ -1229,18 +1264,8 @@ fn main() {
                 // println!("{:?}",extension_groups);
                 let depth_one_items = get_depth_one_items(&filtered_result);
                 let mut size_temp = filtered_result.size;
-                let mut size_unit = "Bytes";
-                if(size_temp >= (1024*1024*1024)){
-                    size_temp = size_temp / (1024*1024*1024);
-                    size_unit = "GBs";
-                }else if (size_temp >= (1024*1024)){
-                    size_temp = size_temp / (1024*1024);
-                    size_unit = "MBs";
-                }else if(size_temp >= 1024){
-                    size_temp = size_temp / (1024);
-                    size_unit = "KBs";
-                }
-                 let Sizelabel = format!("Directory size =  {} {}", size_temp, size_unit);
+                let formatted_used_size = format_size(size_temp);
+                 let Sizelabel = format!("Directory size =  {}", formatted_used_size);
                  let mut size_frame = Frame::new(3000, 2500, 200, 30, "");
                  size_frame.set_label(&Sizelabel);
                  size_frame.set_label_size(18);
@@ -1271,6 +1296,12 @@ fn main() {
                     eprintln!("Unable to determine the user's home directory.");
                 }
                 tree.callback_item();
+                let free_space = get_free_space(&contents2);
+                let mut space_frame = Frame::new(2960, 2650, 280, 30, "");
+                let formatted_size = format_size(free_space);
+                space_frame.set_label(&format!("Disk Free space = {}", &formatted_size));
+                space_frame.set_label_size(18);
+
                 new_wind.show();
                 new_wind.end();
              

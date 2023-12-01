@@ -180,6 +180,7 @@ dependencies = [
  "fltk",
  "fltk-theme",
  "image 0.24.7",
+ "libc",
  "nfd",
  "plotters",
  "regex",
