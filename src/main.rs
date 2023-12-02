@@ -45,7 +45,8 @@ use std::ffi::OsStr;
 use dirs::home_dir;
 use fltk::tree::Tree;
 use fltk::tree::TreeSelect;
-
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufReader};
 #[derive(Copy, Clone)]
 #[derive(PartialEq)]
 
@@ -74,6 +75,12 @@ struct Configurations {
     max_size: u64, // Maximum size in bytes
     use_regex: bool, // Indicates whether to use regex
     regex_pattern: StdOption<String>, // Holds the regex pattern if use_regex is true
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone)]
+struct Entry {
+    date: String,
+    number: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -113,6 +120,10 @@ fn validate_config(config: &AppConfig) -> Result<(), String> {
 
     // All validations passed, return Ok(())
     Ok(())
+}
+fn get_current_date() -> String {
+    let current_date = Local::today();
+    current_date.format("%Y-%m-%d").to_string()
 }
 
 #[derive(Debug)]
@@ -169,6 +180,51 @@ fn sort_files_by_access_time_and_size(filtered_result: &DiskItem, min_size: u64)
     }
 
     selected_files    
+}
+
+fn draw_chart(frame: &mut fltk::frame::Frame) {
+    let data: Vec<f64> = vec![10.0, 20.0, 15.0, 30.0, 25.0]; // Sample data
+    let x_labels = vec!["A", "B", "C", "D", "E", "F"]; // Sample x-axis labels
+    let y_labels = vec!["0", "10", "20", "30", "26"]; // Sample y-axis labels
+
+    let max_value = data.iter().fold(0.0, |max, &val| val.max(max));
+    let height = frame.height() as f64;
+    let width = frame.width() as f64;
+
+    let width_interval = width / (data.len() - 1) as f64;
+    let height_ratio = height / max_value;
+
+    draw::set_draw_color(Color::White);
+    draw::draw_rectf(frame.x(), frame.y(), frame.width(), frame.height());
+
+    draw::set_draw_color(Color::from_u32(0xFF8800));
+    let mut prev_x = frame.x();
+    let mut prev_y = frame.y() + height as i32;
+    for (i, &val) in data.iter().enumerate() {
+        let x = frame.x() as f64 + (i as f64 * width_interval);
+        let y = frame.y() as f64 + height - (val * height_ratio);
+
+        if i > 0 {
+            draw::draw_line(prev_x, prev_y, x as i32, y as i32);
+        }
+
+        prev_x = x as i32;
+        prev_y = y as i32;
+    }
+
+    // Draw x-axis labels
+    let x_step = width / x_labels.len() as f64;
+    for (i, label) in x_labels.iter().enumerate() {
+        let x = (frame.x() as f64 + (i as f64 * x_step) + (x_step / 2.0)) as i32;
+        draw::draw_text2(label, x, frame.y() + frame.height() as i32 + 15, 0, 0,  Align::Center);
+    }
+
+    // Draw y-axis labels
+    let y_step = height / y_labels.len() as f64;
+    for (i, label) in y_labels.iter().enumerate() {
+        let y = (frame.y() as f64 + height - (i as f64 * y_step) - (y_step / 2.0)) as i32;
+        draw::draw_text2(label, frame.x() as i32 - 25, y, 0, 0, Align::Center);
+    }
 }
 
 fn get_files_sorted_alphabetically_recursive(item: &DiskItem) -> Vec<&DiskItem> {
@@ -485,6 +541,10 @@ fn format_size(size_in_bytes: u64) -> String {
         format!("{:.2} GB", size_in_bytes as f64 / GB as f64)
     }
 }
+fn check_file_existence(directory_path: &str, file_name: &str) -> bool {
+    let path = format!("{}/{}", directory_path, file_name);
+    fs::metadata(path).is_ok()
+}
 fn main() {
    
     let app = app::App::default().with_scheme(app::Scheme::Gtk);
@@ -553,6 +613,7 @@ fn main() {
 
         let mut dir_path = directory_path.clone();
         let mut contents2 = contents.clone();
+        let mut contents3 = contents.clone();
         match scan_directory(&directory_path, 0) {
             
                 Ok(scanned_result) => {
@@ -606,10 +667,86 @@ fn main() {
                     menu::MenuFlag::Normal,
                         |_| println!("Clean Up recommendations!"),
                 );
-                
+                menu_bar.add(
+                    "&Get/Directory Size History\t",
+                    Shortcut::Ctrl | 'h',
+                    menu::MenuFlag::Normal,
+                        |_| println!("Directory Size history!"),
+                );
+
                 let filtered_2  = filtered_result.clone();
                 let filtered_3 = filtered_result.clone();
                 let filtered_4 = filtered_result.clone();
+                if let Some(mut item) = menu_bar.find_item("&Get/Directory Size History\t"){
+                    item.set_callback(move |_| {
+                        let mut popup = Window::new(600, 600, 1200, 700, "Directory Size History");
+                        
+                      //  contents3.push_str("/history.txt");
+                        let mut log_path = contents3.clone();
+                        log_path.push_str("/history.txt");
+                        let file_result = File::open(&log_path);
+                        let mut date_frame = Frame::new(50, 50, 200, 600, "");
+                        let mut size_frame = Frame::new(300, 50, 150, 600, "");
+                        let mut name_content = String::from("Date: \n \n");
+                        let mut size_content = String::from("Size: \n \n");
+                        println!("{}", contents3);
+                        match file_result {
+                            Ok(file) => {
+                                let mut reader = BufReader::new(file);
+
+                                let mut entries: Vec<Entry> = Vec::new();
+
+                                for line in reader.lines() {
+                                    if let Ok(line) = line {
+                                        let parts: Vec<&str> = line.split_whitespace().collect();
+                                        if parts.len() == 2 {
+                                            if let Ok(number) = parts[1].parse::<i32>() {
+                                                let entry = Entry {
+                                                    date: parts[0].to_string(),
+                                                    number,
+                                                };
+                                                entries.push(entry);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Process the entries as needed
+                                for entry in &entries {
+                                    //println!("Date: {}, Number: {}", entry.date, entry.number);
+                                    name_content.push_str(&entry.date);
+                                    name_content.push_str("\n");
+                                    size_content.push_str(&format!("{}", &format_size(entry.number.try_into().unwrap())));
+                                    size_content.push_str("\n");
+                                }
+
+                                date_frame.set_label(&name_content);
+                                date_frame.set_label_size(20);
+                                date_frame.set_align(Align::Left | Align::Inside);
+
+                                size_frame.set_label(&size_content);
+                                size_frame.set_label_size(20);
+                                size_frame.set_align(Align::Left | Align::Inside);
+
+                                let mut frame = fltk::frame::Frame::new(500, 200, 650, 280, "");
+                                frame.set_color(Color::White);
+
+                                frame.draw(draw_chart);
+
+                            }
+
+
+                            Err(err) => {
+                                println!("Error opening the file: {}", err);
+                            }
+                        }
+
+
+
+                        popup.show();
+                        popup.end();
+                    });
+                }
                 if let Some(mut item) = menu_bar.find_item("&Get/Clean Up Recommendations\t"){
                     item.set_callback(move |_|{
                         let mut popup = Window::new(600, 600, 800, 800, "Clean Up Recommendations");
@@ -1302,6 +1439,28 @@ fn main() {
                 space_frame.set_label(&format!("Disk Free space = {}", &formatted_size));
                 space_frame.set_label_size(18);
 
+                contents2.push_str("/history.txt");
+                let mut log_path = contents2.clone();
+                // Open the file in append mode
+                // if fs::try_exists(&log_path).is_ok(){
+                //     println!("here\n");
+                //     let mut file1 = File::create(log_path.clone());
+                // }
+                let date = get_current_date();
+                match fs::metadata(log_path.clone()) {
+                    Ok(_) => println!("File exists!"),
+                    Err(_) => {println!("File does not exist!");let mut file1 = File::create(log_path.clone());},
+                }
+                let mut file2 = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(log_path).unwrap();
+                
+                // Write data to the end of the file
+                let mut write_size =  format!("{}\t{}", date,size_temp ).to_string();
+                if let Err(e) = writeln!(file2, "{}",write_size) {
+                    eprintln!("{}", e);
+                }
                 new_wind.show();
                 new_wind.end();
              
